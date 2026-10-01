@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saha Arıza ve Menhol Takip Sistemi</title>
+    <!-- Harita için Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f7f6; color: #333; padding-bottom: 40px; }
+        header { background: #004d40; color: white; padding: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .container { max-width: 600px; margin: 20px auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        h2 { margin-bottom: 15px; color: #004d40; font-size: 1.1rem; border-bottom: 2px solid #e0f2f1; padding-bottom: 8px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
+        input[type="text"], textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; }
+        textarea { resize: vertical; height: 80px; }
+        button { background: #00796b; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 1rem; cursor: pointer; width: 100%; font-weight: bold; transition: background 0.3s; }
+        button:hover { background: #004d40; }
+        .gps-btn { background: #0288d1; margin-bottom: 10px; }
+        .gps-btn:hover { background: #01579b; }
+        #map { height: 350px; width: 100%; border-radius: 8px; margin-top: 20px; border: 1px solid #ccc; }
+        .coords-info { font-size: 0.85rem; color: #555; margin-top: 5px; background: #e1f5fe; padding: 8px; border-radius: 4px; }
+        .preview-img { max-width: 100%; height: auto; margin-top: 10px; border-radius: 6px; display: none; max-height: 200px; object-fit: cover; }
+    </style>
+</head>
+<body>
+
+    <header>🚰 Saha Arıza & Menhol Takip</header>
+
+    <div class="container">
+        <h2>Yeni Arıza / Menhol Kaydı</h2>
+        <form id="arizaForm">
+            
+            <div class="form-group">
+                <label>Konum (GPS Koordinatları)</label>
+                <button type="button" class="gps-btn" onclick="konumAl()">📍 Konumumu Otomatik Al</button>
+                <div id="coordsText" class="coords-info">Henüz konum alınmadı.</div>
+                <input type="hidden" id="lat">
+                <input type="hidden" id="lng">
+            </div>
+
+            <div class="form-group">
+                <label for="fotograf">Fotoğraf Çek / Yükle</label>
+                <input type="file" id="fotograf" accept="image/*" capture="environment" onchange="fotoOnizle(event)">
+                <img id="imgPreview" class="preview-img">
+            </div>
+
+            <div class="form-group">
+                <label for="aciklama">Arıza / Menhol Notu</label>
+                <textarea id="aciklama" placeholder="Örn: 3 nolu cadde kazı çalışması, menhol gömülü idi açıldı..."></textarea>
+            </div>
+
+            <button type="submit">Kaydet</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>Kayıtlı Arıza Haritası</h2>
+        <div id="map"></div>
+    </div>
+
+    <!-- Harita için Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Harita Başlangıç (Ankara merkezli varsayılan, kayıt ekledikçe güncellenir)
+        var map = L.map('map').setView([39.9334, 32.8597], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        let kayitliArizalar = JSON.parse(localStorage.getItem('arizalar')) || [];
+
+        // Haritaya mevcut kayıtları bas
+        function haritayiGuncelle() {
+            // Önceki pinleri temizlemek yerine basitçe yeniden yükleyelim
+            kayitliArizalar.forEach(ariza => {
+                if(ariza.lat && ariza.lng) {
+                    let popupContent = `<b>Not:</b> ${ariza.aciklama}<br>`;
+                    if(ariza.foto) {
+                        popupContent += `<img src="${ariza.foto}" style="width:150px; margin-top:5px; border-radius:4px;"><br>`;
+                    }
+                    popupContent += `<small>Tarih: ${ariza.tarih}</small>`;
+
+                    L.marker([ariza.lat, ariza.lng]).addTo(map)
+                        .bindPopup(popupContent);
+                }
+            });
+            if(kayitliArizalar.length > 0) {
+                let sonKayit = kayitliArizalar[kayitliArizalar.length - 1];
+                map.setView([sonKayit.lat, sonKayit.lng], 15);
+            }
+        }
+
+        haritayiGuncelle();
+
+        // GPS Konum Alma Fonksiyonu
+        function konumAl() {
+            const coordsText = document.getElementById('coordsText');
+            if (navigator.geolocation) {
+                coordsText.innerHTML = "Konum alınıyor, lütfen bekleyin...";
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    let lat = position.coords.latitude;
+                    let lng = position.coords.longitude;
+                    
+                    document.getElementById('lat').value = lat;
+                    document.getElementById('lng').value = lng;
+                    coordsText.innerHTML = `✅ Konum Alındı: Enlem: ${lat.toFixed(5)}, Boylam: ${lng.toFixed(5)}`;
+                }, function(error) {
+                    coordsText.innerHTML = "❌ Konum alınamadı. GPS iznini kontrol edin.";
+                }, { enableHighAccuracy: true });
+            } else {
+                alert("Tarayıcınız konum desteklemiyor.");
+            }
+        }
+
+        // Fotoğraf Önizleme
+        let base64Foto = "";
+        function fotoOnizle(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    base64Foto = e.target.result;
+                    const preview = document.getElementById('imgPreview');
+                    preview.src = base64Foto;
+                    preview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Form Kaydetme
+        document.getElementById('arizaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            let lat = document.getElementById('lat').value;
+            let lng = document.getElementById('lng').value;
+            let aciklama = document.getElementById('aciklama').value;
+
+            if(!lat || !lng) {
+                alert("Lütfen önce 'Konumumu Otomatik Al' butonuna basın!");
+                return;
+            }
+
+            let yeniKayit = {
+                lat: parseFloat(lat),
+                lng: parseFloat(lng),
+                foto: base64Foto,
+                aciklama: aciklama,
+                tarih: new Date().toLocaleDateString('tr-TR')
+            };
+
+            kayitliArizalar.push(yeniKayit);
+            localStorage.setItem('arizalar', JSON.stringify(kayitliArizalar));
+
+            alert("Arıza noktası başarıyla kaydedildi!");
+            location.reload();
+        });
+    </script>
+</body>
+</html>
