@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saha Arıza ve Menhol Takip Sistemi</title>
+    <!-- Harita için Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f7f6; color: #333; padding-bottom: 40px; }
+        
+        header { background: #004d40; color: white; padding: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center; padding-left: 20px; padding-right: 20px;}
+        .header-title { flex: 1; text-align: center; font-size: 1.3rem; letter-spacing: 0.5px; }
+        .header-btns { display: flex; gap: 10px; }
+        .admin-btn-header { background: #ffb300; color: #333; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        .new-btn-header { background: #00796b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85rem; border: 1px solid #fff; }
+        
+        .main-layout { display: flex; flex-wrap: wrap; max-width: 1200px; margin: 20px auto; gap: 20px; padding: 0 10px; }
+        .sidebar { flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); max-height: 600px; overflow-y: auto; }
+        .content-area { flex: 2; min-width: 300px; }
+
+        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h2 { margin-bottom: 15px; color: #004d40; font-size: 1.1rem; border-bottom: 2px solid #e0f2f1; padding-bottom: 8px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
+        input[type="text"], input[type="password"], textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; }
+        textarea { resize: vertical; height: 70px; }
+        button { background: #00796b; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 1rem; cursor: pointer; width: 100%; font-weight: bold; transition: background 0.3s; }
+        button:hover { background: #004d40; }
+        .gps-btn { background: #0288d1; margin-bottom: 10px; }
+        .gps-btn:hover { background: #01579b; }
+        #map { height: 380px; width: 100%; border-radius: 8px; border: 1px solid #ccc; margin-top: 10px; }
+        .coords-info { font-size: 0.85rem; color: #555; margin-top: 5px; background: #e1f5fe; padding: 8px; border-radius: 4px; }
+        .preview-img { max-width: 100%; height: auto; margin-top: 10px; border-radius: 6px; display: none; max-height: 180px; object-fit: cover; }
+
+        /* Karşılama Ekranı Stili */
+        .welcome-card { text-align: center; padding: 40px 20px; background: white; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .welcome-card h1 { color: #004d40; font-size: 1.8rem; margin-bottom: 15px; }
+        .welcome-card p { color: #555; font-size: 1rem; margin-bottom: 25px; line-height: 1.5; }
+        .welcome-card button { max-width: 250px; margin: 0 auto; font-size: 1.1rem; padding: 14px; }
+
+        /* Sol Liste Tasarımı */
+        .ariza-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; border-radius: 6px; margin-bottom: 6px; background: #fafafa; border-left: 4px solid #00796b; }
+        .ariza-item:hover { background: #e0f2f1; }
+        .ariza-item b { color: #004d40; font-size: 1rem; display: block; margin-bottom: 3px; }
+        .ariza-item small { color: #666; font-size: 0.8rem; }
+        .ariza-item.active { background: #e0f2f1; border-left: 4px solid #004d40; }
+
+        /* Detay Paneli Stilleri */
+        .detay-card { background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
+        .detay-card p { margin-bottom: 10px; font-size: 0.95rem; }
+        .detay-img { width: 100%; max-height: 250px; object-fit: cover; border-radius: 6px; margin-top: 10px; }
+
+        /* Modal / Yönetici Paneli */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px; border-radius: 10px; width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; }
+        .close-btn { position: absolute; right: 15px; top: 10px; font-size: 1.5rem; cursor: pointer; color: #aaa; }
+        .close-btn:hover { color: #000; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div style="width: 80px;"></div>
+        <div class="header-title">Saha Arıza Menhol Takip</div>
+        <div class="header-btns">
+            <button type="button" id="btnYeni" class="new-btn-header">➕ Yeni</button>
+            <button type="button" id="btnAdmin" class="admin-btn-header">🔐 Yönetici</button>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <!-- SOL PANEL: Kayıtlı Arızalar Listesi -->
+        <div class="sidebar">
+            <h2>Kayıtlı Arızalar Listesi</h2>
+            <div id="arizaListesiContainer">
+                <!-- JavaScript ile doldurulacak -->
+            </div>
+        </div>
+
+        <!-- SAĞ ALAN: Karşılama, Form veya Arıza Detayı -->
+        <div class="content-area">
+            
+            <!-- 1. Karşılama Ekranı -->
+            <div id="welcomeSection" class="welcome-card">
+                <h1>ARIZA TAKİP SİSTEMİNE HOŞ GELDİNİZ</h1>
+                <p>Saha ekiplerimiz için geliştirilen menhol ve kablo güzergahı takip sistemine hoş geldiniz. Arıza kaydı oluşturmak veya mevcut kayıtları incelemek için aşağıdaki butona tıklayın.</p>
+                <button type="button" id="btnDevam">Devam Et ➔</button>
+            </div>
+
+            <!-- 2. Form Alanı -->
+            <div id="formSection" class="container" style="display: none;">
+                <h2>Yeni Arıza / Menhol Kaydı</h2>
+                <form id="arizaForm">
+                    <div class="form-group">
+                        <label for="arizaAdi">Arıza / Menhol Adı</label>
+                        <input type="text" id="arizaAdi" placeholder="Örn: Batıkent Bulvarı Menhol #4" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Konum (GPS Koordinatları)</label>
+                        <button type="button" id="btnGps" class="gps-btn">📍 Konumumu Otomatik Al</button>
+                        <div id="coordsText" class="coords-info">Henüz konum alınmadı.</div>
+                        <input type="hidden" id="lat">
+                        <input type="hidden" id="lng">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fotograf">Fotoğraf Çek / Yükle</label>
+                        <input type="file" id="fotograf" accept="image/*" capture="environment">
+                        <img id="imgPreview" class="preview-img">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="aciklama">Arıza Detay / Açıklama Notu</label>
+                        <textarea id="aciklama" placeholder="Örn: Kazı sırasında kablo kopmuştu, ek yapıldı..."></textarea>
+                    </div>
+
+                    <button type="submit">Kaydet</button>
+                </form>
+            </div>
+
+            <!-- 3. Detay Alanı -->
+            <div id="detaySection" class="container" style="display: none;">
+                <h2 id="detayBaslik">Arıza Detayı</h2>
+                <div id="detayIcerik"></div>
+            </div>
+
+            <!-- Harita Alanı -->
+            <div class="container">
+                <h2>Kayıtlı Arıza Haritası</h2>
+                <div id="map"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- YÖNETİCİ GİRİŞİ MODALI -->
+    <div id="adminModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="modalKapatBtn">&times;</span>
+            <h2>Yönetici Paneli</h2>
+            <div id="adminLoginArea">
+                <p style="font-size: 0.9rem; margin-bottom: 15px; color: #555;">Kayıtları silmek için şifre girin.</p>
+                <div class="form-group">
+                    <label>Yönetici Şifresi</label>
+                    <input type="password" id="adminSifre" placeholder="Şifre (Varsayılan: 1234)">
+                </div>
+                <button type="button" id="btnAdminGiris">Giriş Yap</button>
+            </div>
+            <div id="adminPanelArea" style="display:none;">
+                <p style="color: green; font-weight: bold; margin-bottom: 15px;">✅ Yönetici Girişi Başarılı</p>
+                <button type="button" id="btnTumunuSil" style="background: #c62828; margin-bottom: 10px;">🗑️ Tüm Kayıtları Temizle</button>
+                <button type="button" id="btnAdminCikis" style="background: #555;">Çıkış Yap</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Harita için Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([39.9334, 32.8597], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        let kayitliArizalar = JSON.parse(localStorage.getItem('arizalar')) || [];
+        let markers = [];
+
+        function arayuzuGuncelle() {
+            const listeContainer = document.getElementById('arizaListesiContainer');
+            listeContainer.innerHTML = "";
+
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+
+            if(kayitliArizalar.length === 0) {
+                listeContainer.innerHTML = "<p style='color:#777; font-size:0.9rem;'>Henüz kayıtlı arıza yok.</p>";
+                return;
+            }
+
+            let bounds = [];
+
+            kayitliArizalar.forEach((ariza) => {
+                if(ariza.lat && ariza.lng) {
+                    let marker = L.marker([ariza.lat, ariza.lng]).addTo(map);
+                    
+                    marker.on('click', function() {
+                        arizaDetayGoster(ariza);
+                    });
+                    markers.push(marker);
+                    bounds.push([ariza.lat, ariza.lng]);
+
+                    let item = document.createElement('div');
+                    item.className = 'ariza-item';
+                    item.innerHTML = `<b>${ariza.ad}</b><small>📅 ${ariza.tarih}</small>`;
+                    
+                    item.onclick = function() {
+                        document.querySelectorAll('.ariza-item').forEach(el => el.classList.remove('active'));
+                        item.classList.add('active');
+
+                        arizaDetayGoster(ariza);
+                        map.setView([ariza.lat, ariza.lng], 16);
+                    };
+                    listeContainer.appendChild(item);
+                }
+            });
+
+            setTimeout(() => { map.invalidateSize(); }, 200);
+            if(bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            }
+        }
+
+        arayuzuGuncelle();
+
+        // Buton Olay Dinleyicileri (Event Listeners)
+        document.getElementById('btnDevam').addEventListener('click', function() {
+            document.getElementById('welcomeSection').style.display = 'none';
+            document.getElementById('formSection').style.display = 'block';
+            setTimeout(() => { map.invalidateSize(); }, 200);
+        });
+
+        document.getElementById('btnYeni').addEventListener('click', function() {
+            document.getElementById('welcomeSection').style.display = 'none';
+            document.getElementById('detaySection').style.display = 'none';
+            document.getElementById('formSection').style.display = 'block';
+            document.querySelectorAll('.ariza-item').forEach(el => el.classList.remove('active'));
+            setTimeout(() => { map.invalidateSize(); }, 200);
+        });
+
+        function arizaDetayGoster(ariza) {
+            document.getElementById('welcomeSection').style.display = 'none';
+            document.getElementById('formSection').style.display = 'none';
+            document.getElementById('detaySection').style.display = 'block';
+            
+            document.getElementById('detayBaslik').innerText = ariza.ad;
+            
+            let detayHTML = `
+                <div class="detay-card">
+                    <p><b>📅 Kayıt Tarihi:</b> ${ariza.tarih}</p>
+                    <p><b>📍 Koordinatlar:</b> ${ariza.lat.toFixed(5)}, ${ariza.lng.toFixed(5)}</p>
+                    <p><b>📝 Açıklama / Not:</b> ${ariza.aciklama}</p>
+            `;
+            if(ariza.foto) {
+                detayHTML += `<p><b>📷 Arıza Fotoğrafı:</b></p><img src="${ariza.foto}" class="detay-img">`;
+            }
+            detayHTML += `</div>`;
+
+            document.getElementById('detayIcerik').innerHTML = detayHTML;
+            setTimeout(() => { map.invalidateSize(); }, 200);
+        }
+
+        document.getElementById('btnGps').addEventListener('click', function() {
+            const coordsText = document.getElementById('coordsText');
+            if (navigator.geolocation) {
+                coordsText.innerHTML = "Konum alınıyor, lütfen bekleyin...";
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    let lat = position.coords.latitude;
+                    let lng = position.coords.longitude;
+                    
+                    document.getElementById('lat').value = lat;
+                    document.getElementById('lng').value = lng;
+                    coordsText.innerHTML = `✅ Konum Alındı: Enlem: ${lat.toFixed(5)}, Boylam: ${lng.toFixed(5)}`;
+                }, function(error) {
+                    coordsText.innerHTML = "❌ Konum alınamadı. GPS iznini kontrol edin.";
+                }, { enableHighAccuracy: true });
+            } else {
+                alert("Tarayıcınız konum desteklemiyor.");
+            }
+        });
+
+        let base64Foto = "";
+        document.getElementById('fotograf').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    base64Foto = e.target.result;
+                    const preview = document.getElementById('imgPreview');
+                    preview.src = base64Foto;
+                    preview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Form Kaydetme
+        document.getElementById('arizaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            let arizaAdi = document.getElementById('arizaAdi').value;
+            let lat = document.getElementById('lat').value;
+            let lng = document.getElementById('lng').value;
+            let aciklama = document.getElementById('aciklama').value;
+
+            if(!lat || !lng) {
+                alert("Lütfen önce 'Konumumu Otomatik Al' butonuna basın!");
+                return;
+            }
+
+            let yeniKayit = {
+                ad: arizaAdi,
+                lat: parseFloat(lat),
+                lng: parseFloat(lng),
+                foto: base64Foto,
+                aciklama: aciklama || "Açıklama girilmedi",
+                tarih: new Date().toLocaleDateString('tr-TR')
+            };
+
+            kayitliArizalar.push(yeniKayit);
+            localStorage.setItem('arizalar', JSON.stringify(kayitliArizalar));
+
+            alert("Arıza noktası başarıyla kaydedildi!");
+            
+            document.getElementById('arizaForm').reset();
+            document.getElementById('imgPreview').style.display = 'none';
+            document.getElementById('coordsText').innerHTML = "Henüz konum alınmadı.";
+            base64Foto = "";
+            
+            arayuzuGuncelle();
+        });
+
+        // Yönetici Paneli Kontrolleri
+        document.getElementById('btnAdmin').addEventListener('click', function() {
+            document.getElementById('adminModal').style.display = 'flex';
+        });
+
+        document.getElementById('modalKapatBtn').addEventListener('click', function() {
+            document.getElementById('adminModal').style.display = 'none';
+        });
+
+        document.getElementById('btnAdminGiris').addEventListener('click', function() {
+            let sifre = document.getElementById('adminSifre').value;
+            if(sifre === "1234") {
+                document.getElementById('adminLoginArea').style.display = 'none';
+                document.getElementById('adminPanelArea').style.display = 'block';
+            } else {
+                alert("Hatalı şifre!");
+            }
+        });
+
+        document.getElementById('btnAdminCikis').addEventListener('click', function() {
+            document.getElementById('adminLoginArea').style.display = 'block';
+            document.getElementById('adminPanelArea').style.display = 'none';
+            document.getElementById('adminSifre').value = "";
+            document.getElementById('adminModal').style.display = 'none';
+        });
+
+        document.getElementById('btnTumunuSil').addEventListener('click', function() {
+            if(confirm("Tüm kayıtları silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+                localStorage.removeItem('arizalar');
+                alert("Tüm kayıtlar temizlendi.");
+                location.reload();
+            }
+        });
+    </script>
+</body>
+</html>
